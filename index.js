@@ -49,6 +49,28 @@ async function run() {
       const result = await assignmentCollection.findOne(query);
       res.send(result);
     });
+    app.put("/assignments/:id", async (req, res)=>{
+      const id = req.params.id;
+      const filter = {_id : new ObjectId(id)};
+      const updatedInfo = req.body;
+      const options = {upsert:true};
+      const assignment = {
+        $set: {
+          title: updatedInfo.title,
+          marks: updatedInfo.marks,
+          thumbnail: updatedInfo.thumbnail,
+          dueDate: updatedInfo.dueDate,
+          details:updatedInfo.details,
+          difficulty:updatedInfo.difficulty
+        },
+      };
+      const result = await assignmentCollection.updateOne(
+        filter,
+        assignment,
+        options
+      );
+      res.send(result);
+    })
     app.delete("/assignments/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
