@@ -10,7 +10,7 @@ require("dotenv").config();
 //using middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173","https://academe-connect.web.app"],
     credentials: true,
   })
 );
@@ -35,7 +35,7 @@ async function run() {
     .collection("assignments");
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     //Assignments
     app.post("/assignments", async (req, res) => {
       const assignment = req.body;
@@ -94,6 +94,22 @@ async function run() {
       const query = { status: req.status };
       const result = await submittedAssignmentCollection.find(query).toArray();
       res.send(result);
+    })
+    app.put("/submittedAssignments/:id",async(req,res)=>{
+      const submittedAssignment = req.body;
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = {upsert:true};
+      const updateDoc = {
+        $set: {
+          status: submittedAssignment.status,
+          obtainMarks:submittedAssignment.obtainMarks,
+          feedback:submittedAssignment.feedback
+        },
+      };
+      const result = await submittedAssignmentCollection.updateOne(filter, updateDoc,options);
+      res.send(result);
+      
     })
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
