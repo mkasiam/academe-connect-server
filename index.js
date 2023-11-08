@@ -17,6 +17,22 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+const verifyToken = async (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "not authorized" });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    //error Handling
+    if (err) {
+      return res.status(401).send({ message: "unauthorized" });
+    }
+    // If token is valid then it would be decoded
+    req.user = decoded;
+    next();
+  });
+};
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.pzmwwb7.mongodb.net/?retryWrites=true&w=majority`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -36,6 +52,25 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
+    //jwt
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1hr",
+      });
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "none",
+        })
+        .send({ success: true });
+    });
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      res.clearCookie("token", { maxAge: 0 }).send({ success: true });
+    });
+
     //Assignments
     app.post("/assignments", async (req, res) => {
       const assignment = req.body;
@@ -43,8 +78,19 @@ async function run() {
       res.send(result);
     });
     app.get("/assignments", async (req, res) => {
-      const result = await assignmentCollection.find().toArray();
+      const page = parseInt(req.query.page);
+      const size = parseInt(req.query.size);
+      console.log("pagination query", page, size);
+      const result = await assignmentCollection
+        .find()
+        .skip(page * size)
+        .limit(size)
+        .toArray();
       res.send(result);
+    });
+    app.get("/assignmentsCount", async (req, res) => {
+      const count = await assignmentCollection.estimatedDocumentCount();
+      res.send({ count });
     });
     app.get("/assignments/:id", async (req, res) => {
       const id = req.params.id;
@@ -88,20 +134,22 @@ async function run() {
       );
       res.send(result);
     });
-    app.get("/submittedAssignments", async (req, res) => {
+    app.get("/submittedAssignments",verifyToken, async (req, res) => {
+      if(req.query.email !== req.user.email){
+        return res.status(403).send({message:"forbidden Access"});
+      }
       const status = req.query.status;
-      const email = req.query.email; // Get the email from the query parameter
-    
-      const query = {}; // Initialize an empty query object
-    
+      const email = req.query.email;
+
+      const query = {};
+
       if (status === "pending") {
         query.status = "pending";
       }
-    
+
       if (email) {
-        query.submittedUserEmail = email; // Add the email condition to the query
+        query.submittedUserEmail = email;
       }
-    
       // Query assignments based on the combined conditions
       const result = await submittedAssignmentCollection.find(query).toArray();
       res.send(result);
