@@ -17,21 +17,20 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-const verifyToken = async (req, res, next) => {
-  const token = req.cookies?.token;
-  if (!token) {
-    return res.status(401).send({ message: "not authorized" });
+const verifyToken = (req, res, next) =>{
+  const token = req?.cookies?.token;
+  // no token available 
+  if(!token){
+      return res.status(401).send({message: 'token chara access'})
   }
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-    //error Handling
-    if (err) {
-      return res.status(401).send({ message: "unauthorized" });
-    }
-    // If token is valid then it would be decoded
-    req.user = decoded;
-    next();
-  });
-};
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) =>{
+      if(err){
+          return res.status(401).send({message: 'unauthorized access'})
+      }
+      req.user = decoded;
+      next();
+  })
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.pzmwwb7.mongodb.net/?retryWrites=true&w=majority`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -53,11 +52,13 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     //jwt
+    // auth related api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: "1hr",
+        expiresIn: "1h",
       });
+
       res
         .cookie("token", token, {
           httpOnly: true,
@@ -66,8 +67,10 @@ async function run() {
         })
         .send({ success: true });
     });
+
     app.post("/logout", async (req, res) => {
       const user = req.body;
+      console.log("logging out", user);
       res.clearCookie("token", { maxAge: 0 }).send({ success: true });
     });
 
@@ -80,7 +83,6 @@ async function run() {
     app.get("/assignments", async (req, res) => {
       const page = parseInt(req.query.page);
       const size = parseInt(req.query.size);
-      console.log("pagination query", page, size);
       const result = await assignmentCollection
         .find()
         .skip(page * size)
@@ -134,12 +136,11 @@ async function run() {
       );
       res.send(result);
     });
-    app.get("/submittedAssignments",verifyToken, async (req, res) => {
-      if(req.query.email !== req.user.email){
-        return res.status(403).send({message:"forbidden Access"});
-      }
-      const status = req.query.status;
+    app.get("/submittedAssignments",verifyToken,  async (req, res) => {
+      
+      
       const email = req.query.email;
+      const status = req.query.status;
 
       const query = {};
 
@@ -148,10 +149,21 @@ async function run() {
       }
 
       if (email) {
+        if (email !== req.user.email) {
+          return res.status(403).send({ message: "forbidden Access" });
+        }
+        // console.log(email);
+        // console.log(req.user.email);
         query.submittedUserEmail = email;
       }
       // Query assignments based on the combined conditions
       const result = await submittedAssignmentCollection.find(query).toArray();
+      res.send(result);
+    });
+    app.get("/submittedAssignment/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await submittedAssignmentCollection.findOne(query);
       res.send(result);
     });
     app.put("/submittedAssignments/:id", async (req, res) => {
